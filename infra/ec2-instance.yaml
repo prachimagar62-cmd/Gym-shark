@@ -1,0 +1,209 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Gymshark storefront on Ubuntu EC2 with Nginx, PM2, SSM, and MongoDB Atlas
+
+Parameters:
+  GitHubRepositoryUrl:
+    Type: String
+    Description: Public GitHub repository URL ending in .git
+    AllowedPattern: '^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$'
+  BranchName:
+    Type: String
+    Default: main
+    Description: Branch deployed by the bootstrap and GitHub Actions workflow
+  InstanceType:
+    Type: String
+    Default: t3.small
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: t3.small is recommended for the Vite production build
+  UbuntuAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Latest Ubuntu Server 24.04 LTS AMI for the selected region
+
+Resources:
+  StoreVpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.42.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
+
+  StoreInternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  StoreInternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref StoreVpc
+      InternetGatewayId: !Ref StoreInternetGateway
+
+  StorePublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref StoreVpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public"
+
+  StoreRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref StoreVpc
+
+  StoreDefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: StoreInternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref StoreRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref StoreInternetGateway
+
+  StoreSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref StorePublicSubnet
+      RouteTableId: !Ref StoreRouteTable
+
+  StoreSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Public HTTP and HTTPS only; administer with Systems Manager
+      VpcId: !Ref StoreVpc
+      SecurityGroupIngress:
+        - Description: HTTP
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - Description: HTTPS
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: GymsharkApp
+          Value: !Ref AWS::StackName
+
+  StoreInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadStoreMongoSecret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${AWS::StackName}/production/MONGODB_URI-*"
+
+  StoreInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref StoreInstanceRole
+
+  StoreInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - StoreDefaultRoute
+    Properties:
+      ImageId: !Ref UbuntuAmi
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref StoreInstanceProfile
+      SubnetId: !Ref StorePublicSubnet
+      SecurityGroupIds:
+        - !Ref StoreSecurityGroup
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-server"
+        - Key: GymsharkApp
+          Value: !Ref AWS::StackName
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+          exec > >(tee -a /var/log/gymshark-bootstrap.log) 2>&1
+
+          apt-get update -y
+          apt-get install -y ca-certificates curl git nginx awscli
+          curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+          apt-get install -y nodejs
+          npm install --global pm2
+
+          mkdir -p /var/www
+          git clone --branch '${BranchName}' --depth 1 '${GitHubRepositoryUrl}' /var/www/gymshark
+          chown -R ubuntu:ubuntu /var/www/gymshark
+
+          cp /var/www/gymshark/infra/nginx.conf /etc/nginx/sites-available/gymshark
+          ln -sfn /etc/nginx/sites-available/gymshark /etc/nginx/sites-enabled/gymshark
+          rm -f /etc/nginx/sites-enabled/default
+          nginx -t
+          systemctl enable --now nginx
+
+          systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || systemctl enable --now amazon-ssm-agent
+
+          pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -n 1 | bash
+
+  StoreElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ip"
+
+  StoreElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt StoreElasticIp.AllocationId
+      InstanceId: !Ref StoreInstance
+
+Outputs:
+  PublicIP:
+    Description: Elastic IP of the web server
+    Value: !Ref StoreElasticIp
+  PublicURL:
+    Description: Website URL (HTTP until you configure a domain and TLS)
+    Value: !Sub "http://${StoreElasticIp}"
+  InstanceId:
+    Description: EC2 instance managed through Systems Manager
+    Value: !Ref StoreInstance
+  MongoSecretName:
+    Description: Secrets Manager secret name expected by the app
+    Value: !Sub "${AWS::StackName}/production/MONGODB_URI"
