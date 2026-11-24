@@ -1,238 +1,116 @@
-# 🚀 Gymshark MERN Stack — AWS Hosting & DevOps Deployment Guide
+# Gymshark MERN: Mac M2 to AWS
 
-> Complete, step-by-step production hosting guide for deploying **Gymshark** (Full MERN Stack: MongoDB Atlas + Express backend + React 19/Vite SPA frontend) onto **AWS EC2** using **CloudFormation Infrastructure-as-Code**, **Nginx Reverse Proxy**, **PM2 Process Manager**, and automated **GitHub Actions CI/CD**.
+This guide follows the same five-step flow as the Windows guide, adapted to the current project and Mac M2. The app has `frontend/` (React/Vite) and `backend/` (Express/Mongoose); MongoDB Atlas hosts the database. CloudFormation creates EC2, Nginx, PM2, Systems Manager, and the GitHub OIDC deployment role. GitHub Actions deploys the app. No SSH key or AWS access-key secrets are needed.
 
----
+## Project settings
 
-## 📋 Project Configuration Summary
-
-| Field | Production Value |
+| Setting | Value |
 |---|---|
-| **GitHub Repository** | `https://github.com/Prince-KC/Gymshark` |
-| **GitHub Username** | `Prince-KC` |
-| **Repository Name** | `Gymshark` |
-| **Branch** | `main` |
-| **CloudFormation Stack Name** | `gymshark-stack` |
-| **EC2 Server Type** | `t2.micro` (Free-tier eligible) |
-| **Operating System** | Ubuntu 24.04 LTS (`ami-0e86e20dae9224db8`) |
-| **AWS Region** | `us-east-1` (N. Virginia) |
-| **Backend API Port** | `5000` |
-| **Frontend Static Root** | `/var/www/app/frontend/dist` |
-| **Database** | MongoDB Atlas Cloud (`gymshark` database) |
+| GitHub repository | `https://github.com/prachimagar62-cmd/Gym-shark` |
+| Branch | `main` |
+| CloudFormation stack | `GymsharkStore` |
+| AWS region | `us-east-1` (or choose one and use it everywhere) |
+| EC2 | Ubuntu 24.04 x86_64, `t3.small` recommended |
+| Frontend | `/var/www/app/frontend/dist` |
+| Backend | `/var/www/app/backend`, internal port `5000` |
+| Database | MongoDB Atlas, database `gymshark` |
 
----
+## Before starting
 
-## 1. Hosting Architecture Overview
+The previous Windows guide contained an Atlas password and a JWT secret. Treat them as compromised: rotate the Atlas database-user password and use a new JWT secret. Never commit `.env` files or put real credentials in GitHub files. AWS and Atlas may incur charges; `t3.small` is not guaranteed free-tier eligible. Delete the CloudFormation stack when finished to remove the EC2 resources.
 
-When a user visits your live Gymshark website, here is how traffic flows through the AWS server:
+Your Mac is Apple Silicon (`arm64`). Use Node 22 LTS (22.12+) or Node 24. The Mac is only for editing, local builds and Git; GitHub Actions and EC2 install their own Linux x86_64 dependencies. Do not copy Windows/Mac `node_modules` to AWS. The app now uses `bcryptjs` to avoid native bcrypt binary differences.
 
-```
-                            [ USER / BROWSER ]
-                                    │
-                         HTTP Request (Port 80)
-                                    ▼
-                  ┌───────────────────────────────────┐
-                  │          AWS EC2 INSTANCE         │
-                  │         (Ubuntu 24.04 LTS)        │
-                  │                                   │
-                  │   ┌───────────────────────────┐   │
-                  │   │    NGINX (Reverse Proxy)  │   │
-                  │   └─────────────┬─────────────┘   │
-                  │                 │                 │
-                  │    ┌────────────┴───────────┐     │
-                  │    │                        │     │
-                  │    ▼                        ▼     │
-                  │  Static Files           Backend   │
-                  │  (Frontend React)       API (PM2) │
-                  │  /var/www/app/frontend  Port 5000 │
-                  │  /dist                  /api/* &  │
-                  │                         /image/*  │
-                  └─────────────────────────────┬─────┘
-                                                │
-                                                │ Database Connection (TLS)
-                                                ▼
-                                    [ CLOUD DATABASE ]
-                                    (MongoDB Atlas M0 - 24/7)
+## Step 1: Prepare and push from your Mac
+
+Open Terminal in the project folder:
+
+```sh
+cd "$HOME/Documents/AWs/PrinceK.C_26140509"
+node --version
+npm ci --prefix frontend
+npm ci --prefix backend
+npm run build
 ```
 
-### Architectural Principles:
-1. **Nginx Web Server (Port 80):** The public entry point. It serves the high-speed compiled React frontend (`frontend/dist`), while reverse-proxying `/api/*` and `/image/*` requests to the internal Express server running on port 5000.
-2. **PM2 Process Manager:** Keeps the Express backend continuously active 24/7 in the background. If the Node process crashes or the EC2 instance reboots, PM2 revives it instantly.
-3. **AWS CloudFormation (IaC):** Defines the entire virtual server, security group (Ports 80 & 22), and SSH key pair automatically via `infra/ec2-instance.yaml`.
-4. **AWS Systems Manager (SSM) Parameter Store:** Automatically stores the generated SSH private key securely inside AWS without ever having to manually download or copy `.pem` files.
-5. **GitHub Actions CI/CD:** A 2-job pipeline that builds the frontend on GitHub's fast 7GB runner, downloads artifacts, connects securely to EC2 via SSH, updates code, runs database migrations, and reloads PM2 and Nginx.
+Check that your Git remote is the intended public repository and your local secrets are ignored:
 
----
+```sh
+git remote -v
+git check-ignore backend/.env
+```
 
-## 2. The 4 Infrastructure Files Created
+Commit and push the hosting changes and lockfiles:
 
-### File 1: `infra/ec2-instance.yaml` (CloudFormation Infrastructure-as-Code)
-- **What it does:** Automatically provisions the Ubuntu 24.04 EC2 instance, configures Security Groups opening Port 80 (HTTP) and Port 22 (SSH), and creates an SSH key pair stored in AWS SSM.
-- **2GB Swap Enabled:** Includes automatic swap configuration on first boot to protect the 1GB `t2.micro` instance from memory exhaustion during builds.
-- **UserData Bootstrap:** Automatically installs Node.js 22, Nginx, Git, PM2, and clones the repository.
-
-### File 2: `infra/nginx.conf` (Web Server & Reverse Proxy)
-- **Frontend Serving:** Serves compiled Vite React assets from `/var/www/app/frontend/dist` with `try_files $uri $uri/ /index.html` (prevents 404 errors when refreshing React Router pages).
-- **API Proxying:** Proxies `/api/*` requests directly to `http://127.0.0.1:5000/api/`.
-- **Image Proxying:** Proxies product images at `/image/*` to Express static file handling with 7-day browser caching headers.
-- **Health Check:** Provides `/health` endpoint returning `Gymshark Live OK` for uptime monitoring.
-
-### File 3: `backend/ecosystem.config.cjs` (PM2 Process Manager)
-- **CommonJS Compatibility:** Uses the `.cjs` extension so PM2 can execute CommonJS configuration while `backend/package.json` specifies `"type": "module"`.
-- **Process Management:** Runs `index.js` under the name `gymshark-backend` with automatic restarts and a 300MB memory ceiling.
-
-### File 4: `.github/workflows/deploy.yml` (Automated CI/CD Pipeline)
-- **Job 1 (`build`):** Runs on GitHub's Ubuntu runner with Node 22, compiles the Vite React frontend using `VITE_API_URL=/api`, and uploads the `frontend-dist` artifact.
-- **Job 2 (`deploy`):** Authenticates with AWS using repository secrets, deploys the CloudFormation stack, fetches the EC2 public IP and SSM private key, waits for SSH port 22 to open, connects via `appleboy/ssh-action@v1.2.0`, pulls the latest code, writes production `.env`, runs database seed, and restarts PM2 and Nginx.
-- **Manual Trigger:** Includes `workflow_dispatch:` so you can trigger deployments with one click directly from the GitHub Actions web UI.
-
----
-
-## 3. Step-by-Step Hosting Setup (From Scratch)
-
-Follow these 5 steps in order:
-
----
-
-### Step 1: Set Up Cloud Database (MongoDB Atlas)
-
-You can reuse your existing MongoDB Atlas account:
-
-1. Log into **https://www.mongodb.com/atlas**
-2. In your existing cluster (e.g., `cluster0.4i4h5r0.mongodb.net`):
-   - You can reuse your existing user: `princekca25_db_user`
-   - Or create a new user under **Database Access**
-3. Verify that **Network Access** includes `0.0.0.0/0` (Active).
-4. Your connection string for Gymshark is:
-   ```
-   mongodb+srv://princekca25_db_user:w55gXCtpYvyrFJCE@cluster0.4i4h5r0.mongodb.net/gymshark?retryWrites=true&w=majority
-   ```
-   *(Notice `/gymshark` is the database name — MongoDB Atlas will automatically create this isolated database without affecting other projects).*
-
----
-
-### Step 2: Collect AWS Credentials
-
-#### If using AWS Learner Lab:
-1. Open your AWS Academy Learner Lab portal.
-2. Click **Start Lab** and wait for the status dot to turn green.
-3. Click **AWS Details** (top right) and click **Show** next to AWS CLI.
-4. Copy the three values:
-   - `aws_access_key_id`
-   - `aws_secret_access_key`
-   - `aws_session_token`
-
-#### If using a standard AWS Account:
-1. Log into AWS Console -> IAM -> Security Credentials -> Create Access Key.
-2. Copy `Access key ID` and `Secret access key` (session token is not needed).
-
----
-
-### Step 3: Configure GitHub Secrets & Variables
-
-1. Go to your Gymshark repository on GitHub:  
-   **https://github.com/Prince-KC/Gymshark**
-2. Click **Settings** (top navigation tab of the repository).
-3. In the left sidebar, click **Secrets and variables** -> **Actions**.
-
-#### Add these 5 Repository Secrets:
-
-Click **New repository secret** for each:
-
-| Secret Name | Value | Description |
-|---|---|---|
-| `AWS_ACCESS_KEY_ID` | `ASIA...` or `AKIA...` | Your AWS access key from Step 2 |
-| `AWS_SECRET_ACCESS_KEY` | `wJalr...` | Your AWS secret key from Step 2 |
-| `AWS_SESSION_TOKEN` | `IQoJb...` | Your AWS session token (Learner Lab only) |
-| `MONGO_URI` | `mongodb+srv://princekca25_db_user:w55gXCtpYvyrFJCE@cluster0.4i4h5r0.mongodb.net/gymshark?retryWrites=true&w=majority` | MongoDB Atlas URI |
-| `JWT_SECRET` | `Gymshark@2026#SecureAthleteJWTToken` | Long random secret string for JWT auth |
-
-#### Add this 1 Repository Variable:
-
-Click the **Variables** tab (next to Secrets) -> **New repository variable**:
-
-| Variable Name | Value |
-|---|---|
-| `AWS_REGION` | `us-east-1` |
-
----
-
-### Step 4: Push Infrastructure Files & Deploy
-
-Open PowerShell in `D:\coding\College\Summer_break\Mern_stack\Gymshark` and execute:
-
-```powershell
+```sh
 git add .
-git commit -m "feat: complete MERN stack application and AWS CI/CD deployment infrastructure"
+git status --short
+git commit -m "Prepare Gymshark for AWS hosting"
 git push origin main
 ```
 
----
+Skip the commit if all changes are already pushed. The EC2 bootstrap clones over HTTPS, so the repository must be public with the current template. Do not run Windows `start.bat` on the Mac.
 
-### Step 5: Verify Live Website
+## Step 2: Set up MongoDB Atlas
 
-1. Go to **https://github.com/Prince-KC/Gymshark/actions**
-2. Click on the running workflow: **"Deploy Gymshark (CloudFormation + SSH)"**
-3. Watch both jobs run:
-   - `Build Frontend` (Compiles React app with Vite on 7GB runner)
-   - `Deploy to EC2` (Creates/verifies CloudFormation stack, connects via SSH, and reloads PM2)
-4. When finished, open the final step **"Print Live URL"** in the deployment log. You will see:
-   ```
-   🎉 Live Gymshark site at http://<YOUR-EC2-PUBLIC-IP>
-   ```
-5. Click the URL or paste it in your browser. Your live Gymshark website is up and running!
+1. In MongoDB Atlas, create/select a cluster and database user. Use the new password after rotating the old one.
+2. Use database name `gymshark` in the Atlas connection URI. URL-encode special characters in the password.
+3. Do not allow `0.0.0.0/0`. After Step 3 creates the server, add its Elastic IP to Atlas Network Access as `PUBLIC_IP/32`.
 
----
+## Step 3: Create AWS infrastructure and store app secrets
 
-## 4. Live Server Maintenance & Useful Commands
+1. Sign in to AWS Console and choose one region (the guide defaults to `us-east-1`).
+2. Open **CloudFormation → Create stack → With new resources** and upload `infra/ec2-instance.yaml`.
+3. Use stack name `GymsharkStore`. Confirm repository URL `https://github.com/prachimagar62-cmd/Gym-shark.git`, branch `main`, and instance type `t3.small`. Acknowledge IAM resource creation and create the stack.
+4. Wait for `CREATE_COMPLETE`. From **Outputs**, copy `PublicIP` and `GitHubDeployRoleArn`. Add `PublicIP/32` in Atlas Network Access and wait for the rule to activate.
+5. In **AWS Secrets Manager**, create a plaintext JSON secret named exactly `GymsharkStore/production`:
 
-To connect directly to your EC2 server:
-
-```bash
-# 1. Fetch your private key from SSM Parameter Store using AWS CLI:
-aws ssm get-parameter --name "/ec2/keypair/gymshark-stack-key" --with-decryption --query "Parameter.Value" --output text > gymshark-key.pem
-chmod 600 gymshark-key.pem
-
-# 2. SSH into your Ubuntu server:
-ssh -i gymshark-key.pem ubuntu@<YOUR-EC2-IP>
+```json
+{
+  "MONGO_URI": "mongodb+srv://USER:URL_ENCODED_PASSWORD@CLUSTER.mongodb.net/gymshark?retryWrites=true&w=majority",
+  "JWT_SECRET": "NEW_RANDOM_SECRET"
+}
 ```
 
-### PM2 Process Manager Commands:
-```bash
-pm2 status                        # Check status of gymshark-backend
-pm2 logs gymshark-backend         # View live console logs
-pm2 restart gymshark-backend      # Restart backend server
-pm2 reload ecosystem.config.cjs   # Zero-downtime hot reload
-```
+Generate a new JWT value locally with `openssl rand -hex 32`; replace both placeholders with your own values. Do not put real values in this file, Git, screenshots, or chat. CloudFormation automatically creates the OIDC provider and least-privilege GitHub deploy role.
 
-### Nginx Web Server Commands:
-```bash
-sudo systemctl status nginx       # Check Nginx status
-sudo nginx -t                     # Test Nginx syntax
-sudo systemctl reload nginx       # Apply configuration changes
-sudo cat /var/log/nginx/gymshark.error.log   # View server error logs
-```
+The stack opens HTTP/HTTPS only; SSH is not exposed. Nginx serves the Vite build and routes `/api/` to Express. PM2 keeps Express running. The Ubuntu AMI is selected per region, so no Windows/Mac AMI choice is needed.
 
-### Manual Database Re-Seeding:
-```bash
-cd /var/www/app/backend
-node src/seed.js                  # Seeds 52 Gymshark products into MongoDB Atlas
-```
+## Step 4: Connect GitHub and deploy
 
----
+In your GitHub repository, open **Settings → Secrets and variables → Actions**.
 
-## 5. Handling AWS Lab Expiration & Server Recovery
+Add one repository secret:
 
-AWS Academy Learner Lab sessions expire every 4 hours. When your lab resets:
+| Secret | Value |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN` | The `GitHubDeployRoleArn` CloudFormation output |
 
-1. Click **Start Lab** in AWS Academy.
-2. Open **AWS Details** and copy the new credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`).
-3. Update those 3 secrets in **GitHub -> Settings -> Secrets and variables -> Actions**.
-4. Go to **Actions** -> click **Deploy Gymshark (CloudFormation + SSH)** -> click the blue **Run workflow** dropdown button -> click **Run workflow**.
-5. GitHub Actions will automatically detect if the server was terminated, re-provision the EC2 instance, install all dependencies, connect to MongoDB Atlas, and bring the website back online!
+Add two repository variables:
 
-> **Note on Data Persistence:** Your products, registered users, and placed orders reside in **MongoDB Atlas (in the cloud)**, so your database is 100% persistent and is never lost when AWS Lab resets.
+| Variable | Value |
+|---|---|
+| `AWS_REGION` | The region used for CloudFormation, such as `us-east-1` |
+| `AWS_DEPLOY_ENABLED` | `true` |
 
----
+No `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, SSH key, Mongo URI, or JWT secret belongs in GitHub. Now open **Actions → Build and deploy Gymshark → Run workflow**, select `main`, and run it. Later pushes to `main` deploy automatically.
 
-*Authored for Gymshark MERN Stack Deployment · Architecture: Node 22 / React 19 / Express 5 / MongoDB Atlas / Nginx / PM2 / AWS CloudFormation / GitHub Actions*
+The workflow builds the frontend on GitHub, waits for Systems Manager, then asks EC2 to pull the repository. EC2 reads Atlas/JWT secrets from Secrets Manager, installs Linux dependencies from each folder's lockfile, builds `frontend/`, and reloads PM2 and Nginx.
+
+## Step 5: Verify the live site
+
+Use the stack's `PublicURL` output (or `http://PUBLIC_IP`). Verify:
+
+- `http://PUBLIC_IP/health` reports the backend as online and database as connected.
+- `http://PUBLIC_IP/women` loads, and refreshing that route still works.
+- Images load and product data appears. After testing signup/contact/orders, confirm the relevant collections exist in Atlas.
+- GitHub **Actions** shows the deployment workflow succeeded.
+
+The initial URL is HTTP. Before using real account credentials, attach a domain to the Elastic IP and configure HTTPS/TLS. Checkout is a demo and does not process payments.
+
+## If something fails
+
+- **Atlas connection:** Confirm the Atlas allow-list includes the EC2 Elastic IP as `/32`, the cluster is active, and the secret JSON keys are exactly `MONGO_URI` and `JWT_SECRET`.
+- **Workflow cannot assume role:** Confirm `AWS_DEPLOY_ROLE_ARN`, `AWS_REGION`, repository variables, and that the OIDC trust in the CloudFormation stack matches this repository and `main`.
+- **No deployment target:** Check that CloudFormation is `CREATE_COMPLETE` and the instance is running/online in Systems Manager.
+- **Stop AWS charges:** Delete the `GymsharkStore` CloudFormation stack. Delete the Atlas cluster and Secrets Manager secret separately if no longer needed.

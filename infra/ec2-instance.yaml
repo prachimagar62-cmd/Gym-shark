@@ -1,106 +1,270 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Description: Gymshark MERN Stack Hosting Infrastructure (EC2 + SSM KeyPair + Security Group)
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Gymshark MERN app on Ubuntu EC2 with Nginx, PM2, SSM, and MongoDB Atlas
 
 Parameters:
+  GitHubRepositoryUrl:
+    Type: String
+    Description: Public GitHub HTTPS clone URL ending in .git
+    AllowedPattern: '^https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$'
+  BranchName:
+    Type: String
+    Default: main
+  GitHubOwner:
+    Type: String
+    Default: prachimagar62-cmd
+    Description: GitHub account or organization that owns the repository
+  GitHubRepository:
+    Type: String
+    Default: Gym-shark
+    Description: GitHub repository name without owner or .git
   InstanceType:
     Type: String
-    Default: t2.micro
-    Description: EC2 instance type (t2.micro is free-tier eligible)
-
-  UbuntuAMI:
-    Type: String
-    Default: ami-0e86e20dae9224db8
-    Description: Ubuntu 24.04 LTS AMI in us-east-1
-
-  SSHLocation:
-    Type: String
-    Default: 0.0.0.0/0
-    Description: Allow SSH from anywhere (for GitHub Actions runners)
+    Default: t3.small
+    AllowedValues:
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: t3.small is recommended for building React on the EC2 server
+  UbuntuAmi:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
+    Description: Region-specific latest Ubuntu 24.04 LTS x86_64 AMI
 
 Resources:
-
-  # 1. SSH KeyPair — private key auto-saved to Systems Manager Parameter Store
-  ServerKeyPair:
-    Type: AWS::EC2::KeyPair
+  AppVpc:
+    Type: AWS::EC2::VPC
     Properties:
-      KeyName: !Sub "${AWS::StackName}-key"
+      CidrBlock: 10.42.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-vpc"
 
-  # 2. Security Group — opens Port 80 (HTTP) and Port 22 (SSH)
-  ServerSecurityGroup:
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-igw"
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref AppVpc
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref AppVpc
+      CidrBlock: 10.42.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-public"
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref AppVpc
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  AppSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Allow HTTP and SSH inbound traffic for Gymshark
+      GroupDescription: Public web only; administer this instance through Systems Manager
+      VpcId: !Ref AppVpc
       SecurityGroupIngress:
-        - IpProtocol: tcp
+        - Description: HTTP
+          IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref SSHLocation
+        - Description: HTTPS
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: GymsharkApp
+          Value: GymsharkStore
 
-  # 3. Ubuntu 24.04 Virtual Machine with Bootstrap UserData
-  ServerInstance:
-    Type: AWS::EC2::Instance
+  InstanceRole:
+    Type: AWS::IAM::Role
     Properties:
-      ImageId: !Ref UbuntuAMI
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Policies:
+        - PolicyName: ReadGymsharkProductionSecret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:GymsharkStore/production-*"
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  GitHubDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-github-deploy"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOwner}/${GitHubRepository}:ref:refs/heads/${BranchName}"
+      Policies:
+        - PolicyName: DeployGymsharkThroughSsm
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: FindTaggedAppInstance
+                Effect: Allow
+                Action: ec2:DescribeInstances
+                Resource: "*"
+              - Sid: WaitForSsmAgent
+                Effect: Allow
+                Action: ssm:DescribeInstanceInformation
+                Resource: "*"
+              - Sid: UseShellDocument
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}::document/AWS-RunShellScript"
+              - Sid: DeployOnlyToGymsharkInstances
+                Effect: Allow
+                Action: ssm:SendCommand
+                Resource: !Sub "arn:${AWS::Partition}:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+                Condition:
+                  StringEquals:
+                    ssm:resourceTag/GymsharkApp: GymsharkStore
+              - Sid: ReadSsmCommandResult
+                Effect: Allow
+                Action: ssm:GetCommandInvocation
+                Resource: "*"
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    DependsOn:
+      - DefaultRoute
+    Properties:
+      ImageId: !Ref UbuntuAmi
       InstanceType: !Ref InstanceType
-      KeyName: !Ref ServerKeyPair
+      IamInstanceProfile: !Ref InstanceProfile
+      SubnetId: !Ref PublicSubnet
       SecurityGroupIds:
-        - !GetAtt ServerSecurityGroup.GroupId
+        - !Ref AppSecurityGroup
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeSize: 24
+            VolumeType: gp3
+            Encrypted: true
+            DeleteOnTermination: true
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-server"
+        - Key: GymsharkApp
+          Value: GymsharkStore
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          set -e
-          exec > /var/log/userdata.log 2>&1
+          set -euxo pipefail
+          exec > >(tee -a /var/log/gymshark-bootstrap.log) 2>&1
 
-          # 1. Enable 2GB swap space (prevents out-of-memory errors on t2.micro)
-          if [ ! -f /swapfile ]; then
-            fallocate -l 2G /swapfile
-            chmod 600 /swapfile
-            mkswap /swapfile
-            swapon /swapfile
-            echo '/swapfile none swap sw 0 0' >> /etc/fstab
-          fi
-
-          # 2. System update & install Node.js 22, Git, Nginx
           apt-get update -y
+          apt-get install -y ca-certificates curl git nginx awscli jq
           curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-          apt-get install -y nodejs nginx git
+          apt-get install -y nodejs
+          npm install --global pm2
 
-          # 3. Install PM2 globally
-          npm install -g pm2
-
-          # 4. Clone Gymshark repository
-          mkdir -p /var/www/app
-          git clone https://github.com/Prince-KC/Gymshark.git /var/www/app
-
-          # 5. Configure Nginx
-          cp /var/www/app/infra/nginx.conf /etc/nginx/sites-available/gymshark
-          ln -sf /etc/nginx/sites-available/gymshark /etc/nginx/sites-enabled/gymshark
-          rm -f /etc/nginx/sites-enabled/default
-
-          nginx -t
-          systemctl enable nginx
-          systemctl restart nginx
-
-          # 6. Set directory ownership and PM2 boot startup
+          mkdir -p /var/www
+          git clone --branch '${BranchName}' --depth 1 '${GitHubRepositoryUrl}' /var/www/app
           chown -R ubuntu:ubuntu /var/www/app
-          sudo -u ubuntu pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -1 | bash
+
+          cp /var/www/app/infra/nginx.conf /etc/nginx/sites-available/gymshark
+          ln -sfn /etc/nginx/sites-available/gymshark /etc/nginx/sites-enabled/gymshark
+          rm -f /etc/nginx/sites-enabled/default
+          nginx -t
+          systemctl enable --now nginx
+          systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || systemctl enable --now amazon-ssm-agent
+
+          pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -n 1 | bash
+
+  AppElasticIp:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+      Tags:
+        - Key: Name
+          Value: !Sub "${AWS::StackName}-ip"
+
+  AppElasticIpAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt AppElasticIp.AllocationId
+      InstanceId: !Ref AppInstance
 
 Outputs:
   PublicIP:
-    Description: Public IP of the server
-    Value: !GetAtt ServerInstance.PublicIp
-
+    Description: Stable Elastic IP for the app and Atlas IP allow-list
+    Value: !Ref AppElasticIp
   PublicURL:
-    Description: Live Gymshark Web Application URL
-    Value: !Sub "http://${ServerInstance.PublicIp}"
-
-  SSMKeyPath:
-    Description: Parameter Store path for private SSH key
-    Value: !Sub "/ec2/keypair/${ServerKeyPair.KeyPairId}"
+    Description: App URL; HTTPS requires a domain and TLS setup
+    Value: !Sub "http://${AppElasticIp}"
+  InstanceId:
+    Description: EC2 instance ID for GitHub Actions and Systems Manager
+    Value: !Ref AppInstance
+  MongoSecretName:
+    Description: Secrets Manager secret name expected by the app
+    Value: GymsharkStore/production
+  GitHubDeployRoleArn:
+    Description: Add this ARN as GitHub Actions secret AWS_DEPLOY_ROLE_ARN
+    Value: !GetAtt GitHubDeployRole.Arn

@@ -14,6 +14,10 @@ router.get("/", async (req, res) => {
     const isDbConnected = mongoose.connection.readyState === 1;
 
     if (!isDbConnected) {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({ success: false, message: "Database unavailable" });
+      }
+
       let filtered = [...initialProducts];
       if (category && category !== "all") {
         filtered = filtered.filter(
@@ -104,6 +108,10 @@ router.get("/:id", async (req, res) => {
   try {
     const isDbConnected = mongoose.connection.readyState === 1;
     if (!isDbConnected) {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({ success: false, message: "Database unavailable" });
+      }
+
       const product = initialProducts.find((p, index) => String(index) === req.params.id || p.name === req.params.id);
       if (!product) return res.status(404).json({ success: false, message: "Product not found" });
       return res.json({ success: true, product });

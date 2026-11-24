@@ -14,6 +14,10 @@ router.post("/", async (req, res) => {
     }
 
     const isDbConnected = mongoose.connection.readyState === 1;
+    if (!isDbConnected && process.env.NODE_ENV === "production") {
+      return res.status(503).json({ success: false, message: "Database unavailable; order was not saved" });
+    }
+
     const orderData = {
       orderNumber: "GS-" + Math.floor(100000 + Math.random() * 900000),
       customerName,
@@ -44,6 +48,10 @@ router.get("/", async (req, res) => {
   try {
     const isDbConnected = mongoose.connection.readyState === 1;
     if (!isDbConnected) {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({ success: false, message: "Database unavailable" });
+      }
+
       return res.json({ success: true, orders: [] });
     }
     const orders = await Order.find().sort({ createdAt: -1 });

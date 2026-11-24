@@ -1,11 +1,17 @@
 import { Router } from "express";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import User from "../models/User.js";
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "gymshark_secret_jwt_key_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET && process.env.NODE_ENV === "production") {
+  throw new Error("JWT_SECRET is required in production.");
+}
+
+const tokenSecret = JWT_SECRET || "local-development-only-secret";
 
 // REGISTER
 router.post("/register", async (req, res) => {
@@ -17,8 +23,12 @@ router.post("/register", async (req, res) => {
 
     const isDbConnected = mongoose.connection.readyState === 1;
     if (!isDbConnected) {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({ success: false, message: "Database unavailable" });
+      }
+
       // In-memory demo response
-      const token = jwt.sign({ email, name, role: "user" }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ email, name, role: "user" }, tokenSecret, { expiresIn: "7d" });
       return res.json({
         success: true,
         message: "Registered successfully (demo mode)",
@@ -34,7 +44,7 @@ router.post("/register", async (req, res) => {
 
     const hashedPassword = await bcrypt.hash(password, 10);
     const user = await User.create({ name, email, password: hashedPassword });
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user._id, role: user.role }, tokenSecret, { expiresIn: "7d" });
 
     res.status(201).json({
       success: true,
@@ -57,8 +67,12 @@ router.post("/login", async (req, res) => {
 
     const isDbConnected = mongoose.connection.readyState === 1;
     if (!isDbConnected) {
+      if (process.env.NODE_ENV === "production") {
+        return res.status(503).json({ success: false, message: "Database unavailable" });
+      }
+
       // Allow instant demo login
-      const token = jwt.sign({ email, name: email.split("@")[0], role: "user" }, JWT_SECRET, { expiresIn: "7d" });
+      const token = jwt.sign({ email, name: email.split("@")[0], role: "user" }, tokenSecret, { expiresIn: "7d" });
       return res.json({
         success: true,
         message: "Logged in successfully (demo mode)",
@@ -77,7 +91,7 @@ router.post("/login", async (req, res) => {
       return res.status(401).json({ success: false, message: "Invalid email or password" });
     }
 
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: "7d" });
+    const token = jwt.sign({ id: user._id, role: user.role }, tokenSecret, { expiresIn: "7d" });
 
     res.json({
       success: true,

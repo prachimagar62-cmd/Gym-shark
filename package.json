@@ -5,12 +5,12 @@
   "main": "start.js",
   "type": "module",
   "scripts": {
-    "start": "node start.js",
-    "dev": "node start.js",
+    "start": "node --env-file-if-exists=backend/.env start.js",
+    "dev": "node --env-file-if-exists=backend/.env start.js",
     "run": "node start.js",
     "build": "npm --prefix frontend run build",
     "seed": "node backend/src/seed.js",
-    "backend": "node backend/index.js",
+    "backend": "npm --prefix backend run start",
     "frontend": "npm --prefix frontend run dev"
   },
   "keywords": [

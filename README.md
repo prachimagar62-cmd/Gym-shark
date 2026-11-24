@@ -2,24 +2,26 @@
 
 A complete, production-ready full-stack **MERN (MongoDB, Express, React, Node.js)** e-commerce application built on the official **Gymshark** design aesthetic.
 
+For deployment from a Mac M2 to AWS EC2 with MongoDB Atlas, see the [AWS hosting guide](hosting.md).
+
 ---
 
 ## ⚡ Quick Start
 
-To run the entire system (both Backend API and Frontend React app concurrently), open your terminal in this directory (`D:\coding\College\Summer_break\Mern_stack\Gymshark`) and run:
+To run the entire system (both Backend API and Frontend React app concurrently) on macOS, install dependencies in each app folder and start from the repository root:
 
 ```bash
+cd "$HOME/Documents/AWs/PrinceK.C_26140509"
+npm ci --prefix frontend
+npm ci --prefix backend
 npm start
 ```
-or
-```bash
-npm run dev
-```
-or double-click **`start.bat`** on Windows.
 
 - **Frontend App:** http://localhost:5173
 - **Backend REST API:** http://localhost:5000
 - **MongoDB Connection:** `mongodb://127.0.0.1:27017/gymshark`
+
+Before starting, copy `backend/.env.example` to `backend/.env`, set a unique `JWT_SECRET`, and set `MONGO_URI` to local MongoDB or your Atlas URI. Never commit `.env`.
 
 ---
 
@@ -52,7 +54,7 @@ Gymshark/
 ├── html/                           ← Original HTML reference files
 ├── css/                            ← Original CSS reference files
 ├── start.js                        ← Concurrent process orchestrator
-├── start.bat                       ← One-click Windows starter
+├── start.bat                       ← Optional Windows-only starter
 ├── package.json                    ← Root scripts runner
 └── README.md                       ← Documentation
 ```

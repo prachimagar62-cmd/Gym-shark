@@ -1,5 +1,6 @@
 import express, { json } from "express";
 import cors from "cors";
+import mongoose from "mongoose";
 import path from "path";
 import { fileURLToPath } from "url";
 import connectToDb from "./src/connectToDb.js";
@@ -7,6 +8,8 @@ import productRoutes from "./src/routes/productRoutes.js";
 import userRoutes from "./src/routes/userRoutes.js";
 import orderRoutes from "./src/routes/orderRoutes.js";
 import contactRoutes from "./src/routes/contactRoutes.js";
+import Product from "./src/models/Product.js";
+import { initialProducts } from "./src/fallbackData.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -32,6 +35,7 @@ app.use("/api/contact", contactRoutes);
 app.get("/api/health", (req, res) => {
   res.json({
     status: "online",
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     app: "Gymshark MERN Stack Backend",
     timestamp: new Date().toISOString(),
   });
@@ -51,8 +55,20 @@ app.get("/", (req, res) => {
   });
 });
 
-// Start server
-app.listen(PORT, async () => {
-  console.log(`Gymshark Backend listening on http://localhost:${PORT}`);
+// Connect first so production cannot accept requests without durable database storage.
+const startServer = async () => {
   await connectToDb();
+  if (mongoose.connection.readyState === 1 && await Product.countDocuments() === 0) {
+    await Product.insertMany(initialProducts);
+    console.log(`Seeded ${initialProducts.length} starter products.`);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Gymshark Backend listening on http://localhost:${PORT}`);
+  });
+};
+
+startServer().catch((error) => {
+  console.error("Backend startup failed:", error.message);
+  process.exit(1);
 });

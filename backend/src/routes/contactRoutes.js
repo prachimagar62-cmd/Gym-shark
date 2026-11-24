@@ -12,6 +12,10 @@ router.post("/", async (req, res) => {
     }
 
     const isDbConnected = mongoose.connection.readyState === 1;
+    if (!isDbConnected && process.env.NODE_ENV === "production") {
+      return res.status(503).json({ success: false, message: "Database unavailable; message was not saved" });
+    }
+
     if (isDbConnected) {
       await Contact.create({ name, email, reason, message });
     }
