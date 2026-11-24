@@ -1,0 +1,533 @@
+*{
+    margin: 0px;
+    padding: 0px;
+    box-sizing: border-box;
+}
+
+.womenhero{
+    margin: 80px;
+}
+
+.womenhero .womens-text{
+  font-family: Montserrat, sans-serif;
+}
+
+.womens-text h1{
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.5;
+  margin-bottom: 15px;
+  margin-top: 40px;
+  text-transform: uppercase;
+}
+
+/* ---------------------------------------------------- */
+/* Cloth category */
+
+.cloth-type{
+    display: flex;
+    flex-direction: row;
+    gap: 15px;
+    margin-top: 40px;
+    justify-content: space-between;
+    box-sizing: border-box;
+}
+
+.cloth-type .box{
+    width:290px;
+    height:auto;
+    border:solid #e5e5e5 2px;
+    position:relative;
+    cursor: pointer;
+    flex: 1;
+}
+
+.colth-type img{
+    width: 100%;
+
+}
+
+.box img {
+    width: 100%;
+}
+
+.box p {
+    padding: 14px 16px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #000;
+    margin: 0;
+    font-family: Montserrat, sans-serif;
+}
+
+/* ----------------------------------------------------------- */
+/* filter and sort */
+
+.content-wrapper{
+    display: flex;
+    gap:40px;
+    margin: 40px 80px 80px 80px;
+    align-items: flex-start;
+}
+
+.filter-sort {
+    width: 360px;
+    position: sticky;
+    top: 100px;
+    align-self: flex-start;
+    padding: 20px 12px;
+    font-family: 'Montserrat', sans-serif;
+    flex-shrink: 0;
+}
+
+
+
+/* Header */
+.filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.filter-header h3 {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 1px;
+}
+
+.clear-btn {
+    background: none;
+    border: none;
+    font-size: 12px;
+    color: #999;
+    cursor: pointer;
+}
+
+.clear-btn:hover {
+    color: #000;
+}
+
+/* Filter Groups */
+.filter-group {
+    border-top: 1px solid #e5e5e5;
+    padding: 18px 0;
+}
+
+.filter-group h4 {
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Sort List */
+.sort-list {
+    list-style: none;
+    margin-top: 20px;
+}
+
+.sort-list li {
+    margin-bottom: 10px;
+}
+
+.sort-list input[type="radio"] {
+    accent-color: black;
+    margin-right: 10px;
+    cursor: pointer;
+}
+
+.sort-list label {
+    font-size: 13px;
+    cursor: pointer;
+    color: #333;
+}
+
+/* ========================================= */
+/* PRODUCT GRID */
+/* ========================================= */
+
+
+.product-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 40px;
+    padding-bottom: 80px;
+}
+
+/* Product Row - Reusable container for 4 products */
+.product-row {
+    display: flex;
+    flex-direction: row;
+    gap: 20px;
+    width: 100%;
+}
+
+/* Product Card */
+.product-card {
+    flex: 1;
+    cursor: pointer;
+    transition: transform 0.2s ease;
+}
+
+.product-card:hover {
+    transform: translateY(-4px);
+}
+
+/* Product Image */
+.product-card img{
+    width: 100%;
+    aspect-ratio: 3/4;
+    margin-bottom: 10px;
+    position: relative;
+    object-fit: cover;
+}
+
+/* Product Info */
+.product-info {
+    font-family: 'Montserrat', sans-serif;
+    position: relative;
+    padding-right: 72px;
+}
+
+.product-name {
+    font-size: 12px;
+    font-weight: 700;
+    color: #000;
+    margin-bottom: 6px;
+    line-height: 1.3;
+    display: block;
+    padding-right: 12px;
+}
+
+/* Place rating to the right of the product name on the same row */
+.product-info .rating {
+    position: absolute;
+    right: 0;
+    top: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Rating */
+.rating {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 6px;
+    font-weight: 700;
+}
+
+.star {
+    font-size: 13px;
+}
+
+.rating-value {
+    font-size: 13px;
+
+}
+
+/* Product Details */
+.product-fit,
+.product-color {
+    font-size: 12px;
+    color: #666;
+    margin-bottom: 2px;
+    line-height: 1.4;
+}
+
+.product-price {
+    font-size: 13px;
+    font-weight: 700;
+    color: #000;
+    margin-top: 6px;
+}
+
+
+
+/* --------------------------------------------------------- */
+
+/* ========================================= */
+/* PRODUCT ROW 2 WITH BANNER */
+/* ========================================= */
+
+.product-row2 {
+    display: flex;
+    gap: 20px;
+    width: 100%;
+}
+
+/* Banner - Takes space of 2 product cards */
+.banner {
+    flex: 2;
+    background-image: url('/image/women/banner.png');
+    background-size: cover;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 40px;
+    overflow: hidden;
+    min-height: 500px;
+}
+
+
+/* Dark overlay for text readability */
+.banner::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+        to top,
+        rgba(0, 0, 0, 0.85),
+        rgba(0, 0, 0, 0.3)
+    );
+    z-index: 1;
+}
+
+/* Banner text content */
+.banner h1,
+.banner p,
+.banner button {
+    position: relative;
+    z-index: 2;
+}
+
+.banner h1 {
+    color: white;
+    font-size: 28px;
+    font-weight: 650;
+    margin-bottom: 10px;
+    line-height: 1.2;
+    letter-spacing: -0.5px;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.banner p {
+    color: white;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1.6;
+    margin-bottom: 10px;
+    max-width: 500px;
+    opacity: 0.95;
+    font-family: 'Montserrat', sans-serif;
+}
+
+.banner button {
+    background-color: white;
+    color: black;
+    border: none;
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: 'Montserrat', sans-serif;
+    width: fit-content;
+}
+
+
+
+/* --------------------------------------------------------------- */
+.women-text{
+  margin: 80px;
+  font-family: Montserrat, sans-serif;
+}
+
+.women-text hr{
+    border: none;
+    height: 1px;
+    background-color: #e5e5e5;
+    margin-top: 100px;
+    margin-bottom: 40px; 
+}
+
+.women-text h1{
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.5;
+  margin-bottom: 15px;
+  margin-top: 40px;
+  text-transform: uppercase;
+}
+
+/* ========================================= */
+/* MEDIA QUERIES */
+/* ========================================= */
+
+/* MOBILE (0px - 500px) */
+@media (min-width: 0px) and (max-width: 500px) {
+    .womenhero {
+        margin: 20px;
+    }
+    
+    .womens-text h1 {
+        font-size: 22px;
+    }
+    
+    .womens-text p {
+        font-size: 14px;
+    }
+    
+    /* Show two cloth boxes per row on small screens */
+    .cloth-type {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .cloth-type .box {
+        flex: 0 0 calc(50% - 6px);
+        box-sizing: border-box;
+        height: auto;
+    }
+
+        .product-card img {
+        margin-bottom: 22px;
+    }
+    
+    .content-wrapper {
+        flex-direction: column;
+        margin: 20px;
+        gap: 20px;
+    }
+    
+    .filter-sort {
+        display: none; /* HIDE FILTER ON MOBILE */
+    }
+    
+    .product-grid {
+        gap: 20px;
+        padding-bottom: 40px;
+    }
+
+    /* Show two products per row on small screens */
+    .product-row {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+
+    .product-row .product-card {
+        flex: 0 0 calc(50% - 6px);
+        box-sizing: border-box;
+        margin: 15px 0px;
+    }
+
+    /* Use a grid so banner spans full width and product-cards sit side-by-side */
+    .product-row2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
+    .product-row2 .banner {
+        grid-column: 1 / -1;
+    }
+
+    .product-row2 .product-card {
+        flex: 0 0 auto;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
+    .product-info{
+        margin-top: -20px;
+    }
+    
+    .banner {
+        min-height: 400px;
+        padding: 30px 20px;
+    }
+    
+    .banner h1 {
+        font-size: 24px;
+    }
+    
+    .banner p {
+        font-size: 13px;
+        max-width: 100%;
+    }
+    
+    .women-text {
+        margin: 40px 20px;
+    }
+    
+    .women-text h1 {
+        font-size: 22px;
+    }
+    
+    .women-text p {
+        font-size: 14px;
+    }
+}
+
+/* TABLET (501px - 768px) */
+@media (min-width: 501px) and (max-width: 768px) {
+    .womenhero {
+        margin: 40px;
+    }
+    
+    .womens-text h1 {
+        font-size: 26px;
+    }
+    
+    .cloth-type {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 12px;
+    }
+    
+    .cloth-type .box {
+        flex: 0 0 calc(50% - 6px);
+        box-sizing: border-box;
+        height: auto;
+    }
+    
+    .content-wrapper {
+        margin: 40px;
+        gap: 30px;
+    }
+    
+    .filter-sort {
+        width: 280px;
+    }
+    
+    .product-row,
+    .product-row2 {
+        flex-wrap: wrap;
+        gap: 15px;
+    }
+    
+    .product-row .product-card {
+        flex: 0 0 calc(50% - 8px);
+    }
+    
+    .product-row2 .banner {
+        flex: 0 0 100%;
+        min-height: 450px;
+    }
+    
+    .product-row2 .product-card {
+        flex: 0 0 calc(50% - 8px);
+    }
+    
+    .banner h1 {
+        font-size: 28px;
+    }
+    
+    .women-text {
+        margin: 60px 40px;
+    }
+    
+    .women-text h1 {
+        font-size: 26px;
+    }
+}

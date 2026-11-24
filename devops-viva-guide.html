@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>DevOps Viva Examination Preparation Guide - MERN on AWS</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm 18mm 16mm;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      color: #1e293b;
+      line-height: 1.55;
+      font-size: 13px;
+      margin: 0;
+      padding: 0;
+    }
+    h1, h2, h3, h4 {
+      color: #0f172a;
+      font-weight: 800;
+    }
+    .header {
+      border-bottom: 2px solid #0284c7;
+      padding-bottom: 14px;
+      margin-bottom: 24px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 9px;
+      background: #e0f2fe;
+      color: #0369a1;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .title {
+      font-size: 24px;
+      margin: 8px 0 4px;
+      color: #0f172a;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: #64748b;
+      margin: 0;
+    }
+    .section-title {
+      font-size: 16px;
+      border-left: 4px solid #0284c7;
+      padding-left: 10px;
+      margin: 24px 0 14px;
+      color: #0369a1;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .qa-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      page-break-inside: avoid;
+    }
+    .question {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+    .q-num {
+      color: #0284c7;
+      font-weight: 800;
+    }
+    .answer {
+      color: #334155;
+      font-size: 12.5px;
+      margin: 0;
+      line-height: 1.5;
+    }
+    .answer strong {
+      color: #0f172a;
+    }
+    .key-point {
+      margin-top: 6px;
+      padding: 6px 10px;
+      background: #ffffff;
+      border-left: 3px solid #10b981;
+      border-radius: 4px;
+      font-size: 12px;
+      color: #065f46;
+    }
+    code {
+      font-family: Consolas, "Courier New", monospace;
+      background: #e2e8f0;
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 11.5px;
+      color: #be185d;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 12px 0;
+      font-size: 12px;
+    }
+    th, td {
+      border: 1px solid #cbd5e1;
+      padding: 7px 10px;
+      text-align: left;
+    }
+    th {
+      background-color: #f1f5f9;
+      font-weight: 700;
+      color: #334155;
+    }
+    .page-break {
+      page-break-before: always;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="badge">Comprehensive Viva Guide</span>
+    <h1 class="title">DevOps & Cloud Deployment Viva Examination</h1>
+    <p class="subtitle">MERN Stack Architecture · AWS EC2 · CloudFormation · Nginx · PM2 · GitHub Actions CI/CD · MongoDB Atlas</p>
+  </div>
+
+  <!-- SECTION 1 -->
+  <div class="section-title">1. High-Level Architecture & DevOps Core Concepts</div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q1.</span> What is DevOps, and what problem does it solve in this project?</div>
+    <div class="answer">
+      <strong>Answer:</strong> DevOps is a cultural and technical methodology that bridges software development (Dev) and IT operations (Ops). Traditionally, developers write code and hand it over to operations engineers to deploy manually, causing communication delays, configuration drift, and human errors. In our project, DevOps automates testing, building, server provisioning, and deployment using automated CI/CD pipelines, allowing code pushed to Git to go live within minutes with zero manual server intervention.
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q2.</span> Walk me through the architecture of your deployed application.</div>
+    <div class="answer">
+      <strong>Answer:</strong> The architecture follows a 3-Tier Production Setup:
+      <ol style="margin: 4px 0; padding-left: 20px;">
+        <li><strong>Presentation Layer:</strong> React (Vite) Single Page Application compiled into static HTML/CSS/JS and served directly by Nginx on Port 80.</li>
+        <li><strong>Application Layer:</strong> Node.js & Express REST API listening internally on Port 5000, kept alive 24/7 by the PM2 process manager.</li>
+        <li><strong>Data Layer:</strong> MongoDB Atlas cloud database cluster (M0 replica set) accessed securely over TLS/SSL from EC2.</li>
+        <li><strong>Routing:</strong> Nginx acts as a reverse proxy, serving the static frontend files for web traffic (<code>/</code>) and transparently proxying API traffic (<code>/api/*</code>) and product images (<code>/image/*</code>) to the Express backend.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q3.</span> What is the difference between Continuous Integration (CI) and Continuous Deployment (CD)?</div>
+    <div class="answer">
+      <strong>Answer:</strong>
+      <ul>
+        <li><strong>Continuous Integration (CI):</strong> The practice of frequently merging code changes into a central repository, where automated builds and tests verify the changes. In our workflow, Job 1 (<code>build</code>) handles CI by checking out the code on GitHub's Ubuntu runner, setting up Node 22, and compiling the React frontend.</li>
+        <li><strong>Continuous Deployment (CD):</strong> The automated release and deployment of validated code directly to production environments without human approval. In our workflow, Job 2 (<code>deploy</code>) handles CD by updating the EC2 instance, running database migrations/seeds, and restarting backend services.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- SECTION 2 -->
+  <div class="section-title">2. Infrastructure-as-Code (IaC) & AWS CloudFormation</div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q4.</span> What is Infrastructure-as-Code (IaC) and why did you use AWS CloudFormation?</div>
+    <div class="answer">
+      <strong>Answer:</strong> IaC is the practice of managing and provisioning computing infrastructure through machine-readable definition files rather than physical hardware configuration or manual web console clicking. We used AWS CloudFormation (<code>infra/ec2-instance.yaml</code>) because:
+      <ul>
+        <li><strong>Reproducibility:</strong> The entire server environment can be replicated identically at any time.</li>
+        <li><strong>Version Control:</strong> Infrastructure changes are committed and tracked in Git.</li>
+        <li><strong>Disaster Recovery:</strong> If the EC2 server or lab session is terminated, CloudFormation recreates the exact server, security groups, and SSH keys in under 3 minutes.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q5.</span> What are the key sections inside your CloudFormation template?</div>
+    <div class="answer">
+      <strong>Answer:</strong>
+      <table>
+        <tr><th>Section</th><th>Purpose in Project</th></tr>
+        <tr><td><code>Parameters</code></td><td>Configurable inputs like <code>InstanceType</code> (t2.micro) and <code>UbuntuAMI</code>.</td></tr>
+        <tr><td><code>Resources</code></td><td>The actual AWS components created: <code>ServerKeyPair</code>, <code>ServerSecurityGroup</code> (Ports 80 & 22), and <code>ServerInstance</code> (EC2).</td></tr>
+        <tr><td><code>UserData</code></td><td>Bootstrap shell script that runs once as root on initial machine boot to install Node.js 22, Git, Nginx, PM2, and enable 2GB swap.</td></tr>
+        <tr><td><code>Outputs</code></td><td>Exported values like <code>PublicIP</code>, <code>PublicURL</code>, and <code>SSMKeyPath</code> for GitHub Actions to query.</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q6.</span> What is AWS UserData and when does it execute?</div>
+    <div class="answer">
+      <strong>Answer:</strong> UserData is a script passed to the EC2 instance during launch that executes only once on the very first boot of the virtual machine, running under <code>root</code> privileges via <code>cloud-init</code>. It is used for bootstrapping the server (installing packages, configuring swap, and initial repository cloning).
+    </div>
+    <div class="key-point"><strong>Viva Pro Tip:</strong> Mention that you used <code>sudo cloud-init status --wait</code> in GitHub Actions to ensure UserData finishes before SSH deploy commands run!</div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 3 -->
+  <div class="section-title">3. CI/CD Pipeline & GitHub Actions</div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q7.</span> Why did you design a Two-Job Pipeline (Build on Runner vs. Deploy on EC2)?</div>
+    <div class="answer">
+      <strong>Answer:</strong> This is a crucial architectural decision:
+      <ul>
+        <li><strong>Resource Constraints:</strong> An AWS <code>t2.micro</code> instance has only 1 vCPU and 1 GB of RAM. Running <code>npm install</code> and <code>npm run build</code> (Vite/Rollup compilation) on a 1 GB instance can trigger the Linux OOM (Out-Of-Memory) killer, crashing the server.</li>
+        <li><strong>GitHub Runner Power:</strong> GitHub's hosted runner provides 7 GB of RAM and 2 fast vCPUs. Building the frontend on GitHub takes ~5 seconds and guarantees zero load on our production server.</li>
+        <li><strong>Artifact Passing:</strong> Job 1 uploads the compiled bundle (<code>frontend-dist</code>), and Job 2 only needs to restart services and run the lightweight backend.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q8.</span> How did you handle secrets and sensitive environment variables?</div>
+    <div class="answer">
+      <strong>Answer:</strong> Sensitive values like AWS Access Keys, Session Tokens, MongoDB Atlas URIs, and JWT Secrets are stored encrypted in <strong>GitHub Repository Secrets</strong>. They are never committed into Git source code. During deployment, the workflow dynamically injects them into the EC2 server's local <code>backend/.env</code> file using <code>printf</code>.
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q9.</span> How is SSH authentication between GitHub Actions and EC2 handled securely?</div>
+    <div class="answer">
+      <strong>Answer:</strong> Instead of manually generating an SSH key pair and pasting private keys across platforms:
+      <ol style="margin: 4px 0; padding-left: 20px;">
+        <li>CloudFormation generates the key pair via <code>AWS::EC2::KeyPair</code>.</li>
+        <li>AWS automatically encrypts and stores the private key inside <strong>AWS Systems Manager (SSM) Parameter Store</strong>.</li>
+        <li>The GitHub Actions deployment runner uses the AWS CLI (<code>aws ssm get-parameter --with-decryption</code>) to retrieve the private key into a temporary memory file (<code>/tmp/key.pem</code>) with strict <code>chmod 600</code> permissions.</li>
+        <li>The runner establishes an SSH connection using <code>appleboy/ssh-action@v1.2.0</code> and deletes the key file immediately upon completion.</li>
+      </ol>
+    </div>
+  </div>
+
+  <!-- SECTION 4 -->
+  <div class="section-title">4. Web Server & Reverse Proxy (Nginx)</div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q10.</span> What is Nginx and why is it used instead of exposing Express directly to port 80?</div>
+    <div class="answer">
+      <strong>Answer:</strong> Nginx is a high-performance HTTP web server and reverse proxy. We use Nginx in front of Node.js because:
+      <ul>
+        <li><strong>Static Asset Performance:</strong> Nginx serves static HTML, CSS, JavaScript, and images with near-zero memory footprint, bypassing the Node event loop.</li>
+        <li><strong>Security:</strong> Express is not exposed directly to the public internet; Nginx acts as a shield, dropping malformed requests and preventing denial-of-service attacks.</li>
+        <li><strong>Unified Port 80 Entry:</strong> Both the frontend and backend share the single public port 80. Nginx intelligently routes traffic based on URL path.</li>
+        <li><strong>Production Hardening:</strong> Supports client max body size controls, gzip compression, and future SSL/TLS HTTPS termination.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q11.</span> Explain the line: <code>try_files $uri $uri/ /index.html;</code> in your Nginx config.</div>
+    <div class="answer">
+      <strong>Answer:</strong> In Single Page Applications (SPAs) built with React Router, routing is handled on the client side in browser JavaScript (e.g., navigating to <code>/men</code> or <code>/contact</code>). When a user reloads the page at <code>http://<IP>/men</code>, the browser requests the literal file <code>/men</code> from the server. Without <code>try_files</code>, Nginx would return a <strong>404 Not Found</strong> error. <code>try_files</code> instructs Nginx: first check if a file named <code>$uri</code> exists, then check if a folder named <code>$uri/</code> exists, and if neither exists, fall back to serving <code>/index.html</code> so React Router can render the route.
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q12.</span> What is the difference between <code>sudo systemctl reload nginx</code> and <code>restart nginx</code>?</div>
+    <div class="answer">
+      <strong>Answer:</strong> <code>reload</code> reads the updated configuration files and spawns new worker processes while allowing existing connections to finish gracefully, resulting in <strong>zero downtime</strong>. <code>restart</code> completely terminates the Nginx master and worker processes and starts them again, which briefly drops all active connections. We always run <code>sudo nginx -t && sudo systemctl reload nginx</code>.
+    </div>
+  </div>
+
+  <div class="page-break"></div>
+
+  <!-- SECTION 5 -->
+  <div class="section-title">5. Process Management (PM2) & Runtime</div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q13.</span> What is PM2 and why is it preferred over <code>nodemon</code> or bare <code>node index.js</code> in production?</div>
+    <div class="answer">
+      <strong>Answer:</strong>
+      <ul>
+        <li><code>node index.js</code> runs attached to the terminal; closing SSH terminates the app. If the application crashes on an unhandled error, it stays dead.</li>
+        <li><code>nodemon</code> is intended for local development to watch for file edits; it consumes excessive CPU/memory monitoring the file system.</li>
+        <li><strong>PM2</strong> is a production process manager that daemonizes the process in the background, auto-restarts on unexpected crashes, enables systemd integration to revive on system reboot, logs stderr/stdout to disk, and monitors memory limits (e.g., <code>max_memory_restart: '300M'</code>).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q14.</span> Why is your PM2 config named <code>ecosystem.config.cjs</code> with a <code>.cjs</code> extension?</div>
+    <div class="answer">
+      <strong>Answer:</strong> In Node.js, when a project's <code>package.json</code> contains <code>"type": "module"</code>, Node treats all <code>.js</code> files as ECMAScript Modules (ESM). However, PM2 expects its configuration file to be in CommonJS format (using <code>module.exports = { ... }</code>). Naming the file with the <code>.cjs</code> extension explicitly forces Node to interpret it as CommonJS, preventing the syntax error <code>ReferenceError: module is not defined in ES module scope</code>.
+    </div>
+  </div>
+
+  <!-- SECTION 6 -->
+  <div class="section-title">6. Database, Linux Systems & Troubleshooting</div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q15.</span> Why did you use MongoDB Atlas instead of running MongoDB inside the EC2 instance?</div>
+    <div class="answer">
+      <strong>Answer:</strong>
+      <ul>
+        <li><strong>Data Persistence:</strong> In educational and lab environments, EC2 instances can be stopped or terminated. Running MongoDB locally on EC2 would mean database loss on instance termination. Atlas cloud databases persist independently 24/7.</li>
+        <li><strong>Resource Conservation:</strong> Running a database server requires significant RAM and CPU, which would quickly exhaust a <code>t2.micro</code> instance.</li>
+        <li><strong>Managed Services:</strong> Atlas handles replica set high-availability, automated patching, TLS encryption, and backups automatically.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q16.</span> What is a Swap file and why did you configure 2GB of swap on EC2?</div>
+    <div class="answer">
+      <strong>Answer:</strong> Swap is space on a secondary storage drive (like an SSD/EBS volume) that the Linux operating system uses as virtual memory when physical RAM becomes full. Since the free-tier <code>t2.micro</code> has only 1 GB of physical RAM, allocating a 2 GB swap file (<code>/swapfile</code>) ensures that temporary memory spikes during package installation or system updates do not crash the operating system or trigger the Linux OOM (Out Of Memory) killer.
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q17.</span> If a user reports "502 Bad Gateway" on your live website, what does it mean and how do you fix it?</div>
+    <div class="answer">
+      <strong>Answer:</strong> An HTTP <strong>502 Bad Gateway</strong> error means Nginx is running and received the client's request, but when Nginx attempted to proxy the request to the upstream backend server (Express on Port 5000), Express was not responding.
+      <br><strong>Troubleshooting steps:</strong>
+      <ol style="margin: 4px 0; padding-left: 20px;">
+        <li>SSH into the EC2 instance: <code>ssh -i key.pem ubuntu@&lt;IP&gt;</code></li>
+        <li>Check backend process status: <code>pm2 status</code></li>
+        <li>View error logs to see why Express crashed: <code>pm2 logs gymshark-backend --lines 50</code></li>
+        <li>Inspect Nginx logs: <code>sudo tail -f /var/log/nginx/gymshark.error.log</code></li>
+        <li>Common causes: MongoDB connection failure (wrong URI or Atlas IP whitelist), missing environment variables, or port conflict.</li>
+      </ol>
+    </div>
+  </div>
+
+  <div class="qa-card">
+    <div class="question"><span class="q-num">Q18.</span> Summary: What are the main DevOps tools used in this project and their roles?</div>
+    <div class="answer">
+      <table>
+        <tr><th>Tool / Service</th><th>Category</th><th>Role in Project</th></tr>
+        <tr><td><strong>Git & GitHub</strong></td><td>Source Code Management</td><td>Version control, remote repository hosting, and CI/CD trigger.</td></tr>
+        <tr><td><strong>GitHub Actions</strong></td><td>CI/CD Automation</td><td>Automates React build, CloudFormation check, and SSH deployment.</td></tr>
+        <tr><td><strong>AWS CloudFormation</strong></td><td>Infrastructure-as-Code</td><td>Declarative provisioning of EC2, security groups, and key pairs.</td></tr>
+        <tr><td><strong>AWS SSM Parameter Store</strong></td><td>Secrets Management</td><td>Secure storage and programmatic retrieval of SSH private keys.</td></tr>
+        <tr><td><strong>AWS EC2 (Ubuntu 24.04)</strong></td><td>Compute (IaaS)</td><td>Virtual server hosting our web services.</td></tr>
+        <tr><td><strong>Nginx</strong></td><td>Web Server / Reverse Proxy</td><td>Serves React static assets, routes <code>/api</code>, and handles HTTP on port 80.</td></tr>
+        <tr><td><strong>PM2</strong></td><td>Process Management</td><td>Keeps Express running 24/7, handles crashes, reboots, and monitoring.</td></tr>
+        <tr><td><strong>MongoDB Atlas</strong></td><td>Database-as-a-Service (DBaaS)</td><td>Cloud NoSQL database with persistence across server resets.</td></tr>
+      </table>
+    </div>
+  </div>
+
+</body>
+</html>

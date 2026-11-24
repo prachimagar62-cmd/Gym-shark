@@ -1,209 +1,106 @@
-AWSTemplateFormatVersion: "2010-09-09"
-Description: Gymshark storefront on Ubuntu EC2 with Nginx, PM2, SSM, and MongoDB Atlas
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Gymshark MERN Stack Hosting Infrastructure (EC2 + SSM KeyPair + Security Group)
 
 Parameters:
-  GitHubRepositoryUrl:
-    Type: String
-    Description: Public GitHub repository URL ending in .git
-    AllowedPattern: '^https://github.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\.git$'
-  BranchName:
-    Type: String
-    Default: main
-    Description: Branch deployed by the bootstrap and GitHub Actions workflow
   InstanceType:
     Type: String
-    Default: t3.small
-    AllowedValues:
-      - t3.micro
-      - t3.small
-      - t3.medium
-    Description: t3.small is recommended for the Vite production build
-  UbuntuAmi:
-    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
-    Default: /aws/service/canonical/ubuntu/server/24.04/stable/current/amd64/hvm/ebs-gp3/ami-id
-    Description: Latest Ubuntu Server 24.04 LTS AMI for the selected region
+    Default: t2.micro
+    Description: EC2 instance type (t2.micro is free-tier eligible)
+
+  UbuntuAMI:
+    Type: String
+    Default: ami-0e86e20dae9224db8
+    Description: Ubuntu 24.04 LTS AMI in us-east-1
+
+  SSHLocation:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: Allow SSH from anywhere (for GitHub Actions runners)
 
 Resources:
-  StoreVpc:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.42.0.0/16
-      EnableDnsHostnames: true
-      EnableDnsSupport: true
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-vpc"
 
-  StoreInternetGateway:
-    Type: AWS::EC2::InternetGateway
+  # 1. SSH KeyPair — private key auto-saved to Systems Manager Parameter Store
+  ServerKeyPair:
+    Type: AWS::EC2::KeyPair
     Properties:
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-igw"
+      KeyName: !Sub "${AWS::StackName}-key"
 
-  StoreInternetGatewayAttachment:
-    Type: AWS::EC2::VPCGatewayAttachment
-    Properties:
-      VpcId: !Ref StoreVpc
-      InternetGatewayId: !Ref StoreInternetGateway
-
-  StorePublicSubnet:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref StoreVpc
-      CidrBlock: 10.42.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs ""]
-      MapPublicIpOnLaunch: true
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-public"
-
-  StoreRouteTable:
-    Type: AWS::EC2::RouteTable
-    Properties:
-      VpcId: !Ref StoreVpc
-
-  StoreDefaultRoute:
-    Type: AWS::EC2::Route
-    DependsOn: StoreInternetGatewayAttachment
-    Properties:
-      RouteTableId: !Ref StoreRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
-      GatewayId: !Ref StoreInternetGateway
-
-  StoreSubnetRouteTableAssociation:
-    Type: AWS::EC2::SubnetRouteTableAssociation
-    Properties:
-      SubnetId: !Ref StorePublicSubnet
-      RouteTableId: !Ref StoreRouteTable
-
-  StoreSecurityGroup:
+  # 2. Security Group — opens Port 80 (HTTP) and Port 22 (SSH)
+  ServerSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: Public HTTP and HTTPS only; administer with Systems Manager
-      VpcId: !Ref StoreVpc
+      GroupDescription: Allow HTTP and SSH inbound traffic for Gymshark
       SecurityGroupIngress:
-        - Description: HTTP
-          IpProtocol: tcp
+        - IpProtocol: tcp
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
-        - Description: HTTPS
-          IpProtocol: tcp
-          FromPort: 443
-          ToPort: 443
-          CidrIp: 0.0.0.0/0
-      SecurityGroupEgress:
-        - IpProtocol: -1
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: GymsharkApp
-          Value: !Ref AWS::StackName
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
 
-  StoreInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: "2012-10-17"
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ec2.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      Policies:
-        - PolicyName: ReadStoreMongoSecret
-          PolicyDocument:
-            Version: "2012-10-17"
-            Statement:
-              - Effect: Allow
-                Action:
-                  - secretsmanager:GetSecretValue
-                Resource: !Sub "arn:${AWS::Partition}:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:${AWS::StackName}/production/MONGODB_URI-*"
-
-  StoreInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Roles:
-        - !Ref StoreInstanceRole
-
-  StoreInstance:
+  # 3. Ubuntu 24.04 Virtual Machine with Bootstrap UserData
+  ServerInstance:
     Type: AWS::EC2::Instance
-    DependsOn:
-      - StoreDefaultRoute
     Properties:
-      ImageId: !Ref UbuntuAmi
+      ImageId: !Ref UbuntuAMI
       InstanceType: !Ref InstanceType
-      IamInstanceProfile: !Ref StoreInstanceProfile
-      SubnetId: !Ref StorePublicSubnet
+      KeyName: !Ref ServerKeyPair
       SecurityGroupIds:
-        - !Ref StoreSecurityGroup
-      MetadataOptions:
-        HttpEndpoint: enabled
-        HttpTokens: required
-      BlockDeviceMappings:
-        - DeviceName: /dev/sda1
-          Ebs:
-            VolumeSize: 20
-            VolumeType: gp3
-            Encrypted: true
-            DeleteOnTermination: true
+        - !GetAtt ServerSecurityGroup.GroupId
       Tags:
         - Key: Name
           Value: !Sub "${AWS::StackName}-server"
-        - Key: GymsharkApp
-          Value: !Ref AWS::StackName
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash
-          set -euxo pipefail
-          exec > >(tee -a /var/log/gymshark-bootstrap.log) 2>&1
+          set -e
+          exec > /var/log/userdata.log 2>&1
 
+          # 1. Enable 2GB swap space (prevents out-of-memory errors on t2.micro)
+          if [ ! -f /swapfile ]; then
+            fallocate -l 2G /swapfile
+            chmod 600 /swapfile
+            mkswap /swapfile
+            swapon /swapfile
+            echo '/swapfile none swap sw 0 0' >> /etc/fstab
+          fi
+
+          # 2. System update & install Node.js 22, Git, Nginx
           apt-get update -y
-          apt-get install -y ca-certificates curl git nginx awscli
           curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-          apt-get install -y nodejs
-          npm install --global pm2
+          apt-get install -y nodejs nginx git
 
-          mkdir -p /var/www
-          git clone --branch '${BranchName}' --depth 1 '${GitHubRepositoryUrl}' /var/www/gymshark
-          chown -R ubuntu:ubuntu /var/www/gymshark
+          # 3. Install PM2 globally
+          npm install -g pm2
 
-          cp /var/www/gymshark/infra/nginx.conf /etc/nginx/sites-available/gymshark
-          ln -sfn /etc/nginx/sites-available/gymshark /etc/nginx/sites-enabled/gymshark
+          # 4. Clone Gymshark repository
+          mkdir -p /var/www/app
+          git clone https://github.com/Prince-KC/Gymshark.git /var/www/app
+
+          # 5. Configure Nginx
+          cp /var/www/app/infra/nginx.conf /etc/nginx/sites-available/gymshark
+          ln -sf /etc/nginx/sites-available/gymshark /etc/nginx/sites-enabled/gymshark
           rm -f /etc/nginx/sites-enabled/default
+
           nginx -t
-          systemctl enable --now nginx
+          systemctl enable nginx
+          systemctl restart nginx
 
-          systemctl enable --now snap.amazon-ssm-agent.amazon-ssm-agent.service || systemctl enable --now amazon-ssm-agent
-
-          pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -n 1 | bash
-
-  StoreElasticIp:
-    Type: AWS::EC2::EIP
-    Properties:
-      Domain: vpc
-      Tags:
-        - Key: Name
-          Value: !Sub "${AWS::StackName}-ip"
-
-  StoreElasticIpAssociation:
-    Type: AWS::EC2::EIPAssociation
-    Properties:
-      AllocationId: !GetAtt StoreElasticIp.AllocationId
-      InstanceId: !Ref StoreInstance
+          # 6. Set directory ownership and PM2 boot startup
+          chown -R ubuntu:ubuntu /var/www/app
+          sudo -u ubuntu pm2 startup systemd -u ubuntu --hp /home/ubuntu | tail -1 | bash
 
 Outputs:
   PublicIP:
-    Description: Elastic IP of the web server
-    Value: !Ref StoreElasticIp
+    Description: Public IP of the server
+    Value: !GetAtt ServerInstance.PublicIp
+
   PublicURL:
-    Description: Website URL (HTTP until you configure a domain and TLS)
-    Value: !Sub "http://${StoreElasticIp}"
-  InstanceId:
-    Description: EC2 instance managed through Systems Manager
-    Value: !Ref StoreInstance
-  MongoSecretName:
-    Description: Secrets Manager secret name expected by the app
-    Value: !Sub "${AWS::StackName}/production/MONGODB_URI"
+    Description: Live Gymshark Web Application URL
+    Value: !Sub "http://${ServerInstance.PublicIp}"
+
+  SSMKeyPath:
+    Description: Parameter Store path for private SSH key
+    Value: !Sub "/ec2/keypair/${ServerKeyPair.KeyPairId}"
